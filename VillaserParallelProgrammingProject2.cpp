@@ -1,3 +1,4 @@
+//Report can be found at https://docs.google.com/document/d/1sTJ5LmEHCYR-0aFnTE5WBG-1mdTPPoaS5SAK8-avxLY/edit?usp=sharing
 #include <iostream>
 #include <omp.h>
 #include <stdio.h>
