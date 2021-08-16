@@ -1,0 +1,323 @@
+//unsigned int seed = 0;
+
+//You are creating a month - by - month simulation of a grain - growing operation.The amount the grain grows is 
+//affected by the temperature, amount of precipitation, and the number of "graindeer" around to eat it.
+//The number of graindeer depends on the amount of grain available to eat.
+//The "state" of the system consists of the following global variables :
+#define _USE_MATH_DEFINES
+
+#include <iostream>
+#include <omp.h>
+#include <stdio.h>
+#include <math.h>
+#include <fstream>
+#include <stdlib.h>
+#include <time.h>
+
+
+#ifndef NUMT
+#define NUMT               3
+#endif
+using namespace std;
+
+
+//Prototypes
+
+void	InitBarrier(int);
+void	WaitBarrier();
+void TimeOfDaySeed();
+void Watcher();
+void Grain();
+void GrainDeer();
+float SQR(float);
+
+//barrier stuff
+unsigned int seed = 0;
+omp_lock_t	Lock;
+int		NumInThreadTeam;
+int		NumAtBarrier;
+int		NumGone;
+
+
+//Your basic time step will be one month.Interesting parameters that you need are :
+const float GRAIN_GROWS_PER_MONTH = 9.0;
+const float ONE_DEER_EATS_PER_MONTH = 1.0;
+
+const float AVG_PRECIP_PER_MONTH = 7.0;	// average
+const float AMP_PRECIP_PER_MONTH = 6.0;	// plus or minus
+const float RANDOM_PRECIP = 2.0;	// plus or minus noise
+
+const float AVG_TEMP = 60.0;	// average
+const float AMP_TEMP = 20.0;	// plus or minus
+const float RANDOM_TEMP = 10.0;	// plus or minus noise
+
+const float MIDTEMP = 40.0;
+const float MIDPRECIP = 10.0;
+//Units of grain growth are inches.
+//Units of temperature are degrees Fahrenheit(°F).
+//Units of precipitation are inches.
+
+
+	//Starting values are :
+int	NowYear;		// 2020 - 2025
+int	NowMonth;		// 0 - 11
+
+float	NowPrecip;		// inches of rain per month
+float	NowTemp;		// temperature this month
+float	NowHeight;		// grain height in inches
+int	NowNumDeer;		// number of deer in the current population
+
+float ang, temp, precip, tempFactor, precipFactor;
+
+float nextHeight = NowHeight;
+float nextNumDeer = NowNumDeer;
+
+
+
+
+
+//cm = inches * 2.54
+//°C = (5. / 9.) * (°F - 32)
+void //Start barrier
+InitBarrier(int n)
+{
+	NumInThreadTeam = n;
+	NumAtBarrier = 0;
+	omp_init_lock(&Lock);
+}
+
+
+// have the calling thread wait here until all the other threads catch up:
+
+void
+WaitBarrier() //wait barrier
+{
+	omp_set_lock(&Lock);
+	{
+		NumAtBarrier++;
+		if (NumAtBarrier == NumInThreadTeam)
+		{
+			NumGone = 0;
+			NumAtBarrier = 0;
+			// let all other threads get back to what they were doing
+// before this one unlocks, knowing that they might immediately
+// call WaitBarrier( ) again:
+			while (NumGone != NumInThreadTeam - 1);
+			omp_unset_lock(&Lock);
+			return;
+		}
+	}
+	omp_unset_lock(&Lock);
+
+	while (NumAtBarrier != 0);	// this waits for the nth thread to arrive
+
+#pragma omp atomic
+	NumGone++;			// this flags how many threads have returned
+}
+
+//rand
+float
+Ranf(unsigned int* seedp, float low, float high)
+{
+	float r = (float)rand();              // 0 - RAND_MAX
+
+	return(low + r * (high - low) / (float)RAND_MAX);
+}
+
+void
+TimeOfDaySeed()
+{
+	struct tm y2k = { 0 };
+	y2k.tm_hour = 0;   y2k.tm_min = 0; y2k.tm_sec = 0;
+	y2k.tm_year = 100; y2k.tm_mon = 0; y2k.tm_mday = 1;
+
+	time_t  timer;
+	time(&timer);
+	double seconds = difftime(timer, mktime(&y2k));
+	unsigned int seed = (unsigned int)(1000. * seconds);    // milliseconds
+	srand(seed);
+}
+
+void Watcher() {
+	InitBarrier(NUMT);
+
+	while (NowYear != 2021)
+	{
+		cout << "6" << endl;
+
+		WaitBarrier(); //barrier 1
+
+		WaitBarrier();//barrier 2
+		//Write out Now State
+		//Advance Time and recompute all environmental variables
+		if (NowMonth == 11)
+		{
+			NowMonth = 0;
+			NowYear = NowYear++;
+		}
+		else
+		{
+			NowMonth++;
+		}
+		printf("Year	Month	Rain	Temp	NowGrain	NowNumDeer\n");
+		printf("%f		%f		%f		%f		%f			%f", NowYear, NowMonth, NowPrecip, NowTemp, NowHeight, NowNumDeer);
+		float ang = (30. * (float)NowMonth + 15.) * (M_PI / 180.);
+
+		float temp = AVG_TEMP - AMP_TEMP * cos(ang);
+		NowTemp = temp + Ranf(&seed, -RANDOM_TEMP, RANDOM_TEMP);
+
+		float precip = AVG_PRECIP_PER_MONTH + AMP_PRECIP_PER_MONTH * sin(ang);
+		NowPrecip = precip + Ranf(&seed, -RANDOM_PRECIP, RANDOM_PRECIP);
+		if (NowPrecip < 0.)
+			NowPrecip = 0.;
+
+		float tempFactor = exp(-SQR((NowTemp - MIDTEMP) / 10.));
+
+		float precipFactor = exp(-SQR((NowPrecip - MIDPRECIP) / 10.));
+
+
+		WaitBarrier(); //barrier 3
+		cout << "7" << endl;
+
+	}
+}
+void Grain() {
+	InitBarrier(NUMT);
+
+	while (NowYear != 2021)
+	{
+		cout << "8" << endl;
+
+		nextHeight = NowHeight;
+		nextHeight += tempFactor * precipFactor * GRAIN_GROWS_PER_MONTH;
+		nextHeight -= (float)NowNumDeer * ONE_DEER_EATS_PER_MONTH;
+
+		WaitBarrier(); //barrier 1
+
+		NowHeight = nextHeight;
+		WaitBarrier();//barrier 2
+
+		WaitBarrier(); //barrier 3
+		cout << "9" << endl;
+
+	}
+}
+void GrainDeer() {
+	InitBarrier(NUMT);
+
+	while (NowYear != 2021)
+	{
+		cout << "10" << endl;
+		cout << NowYear << endl;
+		if (NowHeight > NowNumDeer)
+		{
+			nextNumDeer++;
+		}
+		else if (NowHeight < NowNumDeer)
+		{
+			nextNumDeer--;
+		}
+		else 
+		{ 
+			nextNumDeer = nextNumDeer; 
+		}
+		cout << "12" << endl;
+		WaitBarrier(); //barrier 1
+		cout << "12" << endl;
+		NowNumDeer = nextNumDeer;
+
+		WaitBarrier();//barrier 2
+		cout << "11" << endl;
+
+		WaitBarrier(); //barrier 3
+	}
+}
+int main() {
+	cout << "1" << endl;
+	TimeOfDaySeed();
+	
+	// starting date and time:
+	NowMonth = 0;
+	NowYear = 2020;
+
+	// starting state (feel free to change this if you want):
+	NowNumDeer = 1;
+	NowHeight = 1.;
+
+	//float tempFactor = exp(-SQR((NowTemp - MIDTEMP) / 10.));
+
+	//float precipFactor = exp(-SQR((NowPrecip - MIDPRECIP) / 10.));
+
+	//	You then use tempFactorand precipFactor like this:
+
+
+	float ang = (30. * (float)NowMonth + 15.) * (M_PI / 180.);
+
+	float temp = AVG_TEMP - AMP_TEMP * cos(ang);
+	NowTemp = temp + Ranf(&seed, -RANDOM_TEMP, RANDOM_TEMP);
+
+	float precip = AVG_PRECIP_PER_MONTH + AMP_PRECIP_PER_MONTH * sin(ang);
+	NowPrecip = precip + Ranf(&seed, -RANDOM_PRECIP, RANDOM_PRECIP);
+	if (NowPrecip < 0.)
+		NowPrecip = 0.;
+
+	float tempFactor = exp(-SQR((NowTemp - MIDTEMP) / 10.));
+
+	float precipFactor = exp(-SQR((NowPrecip - MIDPRECIP) / 10.));
+
+/*	float nextHeight = NowHeight;
+	float nextNumDeer = NowNumDeer;*/
+	nextHeight += tempFactor * precipFactor * GRAIN_GROWS_PER_MONTH;
+	nextHeight -= (float)NowNumDeer * ONE_DEER_EATS_PER_MONTH;
+
+	if (nextHeight <= 0)
+	{
+		nextHeight = 0;
+	}
+	cout << "2" << endl;
+
+//Because you know ahead of time how many threads you will need(3 or 4), start the threads with a parallel sections directive :
+
+	omp_set_num_threads(NUMT);	// same as # of sections
+#pragma omp parallel sections
+	{
+#pragma omp section
+		{
+			cout << "3" << endl;
+
+			GrainDeer();
+		}
+
+#pragma omp section
+		{
+			cout << "4" << endl;
+
+			Grain();
+		}
+
+#pragma omp section
+		{
+			cout << "5" << endl;
+
+			Watcher();
+		}
+		/*
+#pragma omp section
+		{
+			MyAgent();	// your own
+		}*/
+	}       // implied barrier -- all functions must return in order
+		// to allow any of them to get past here
+	//Put this at the top of your program to make it a global :
+	//unsigned int seed = 0;
+	//The temperatureand precipitation are a function of the particular month :
+
+
+
+}
+
+float
+SQR(float x)
+{
+	return x * x;
+}
