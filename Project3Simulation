@@ -1,4 +1,4 @@
-//unsigned int seed = 0;
+//Report can be found at https://docs.google.com/document/d/160nnq8-URPcUSF_aIbKQtVj3hph_BcJuRPuouAWn5AQ/edit?usp=sharing
 
 //You are creating a month - by - month simulation of a grain - growing operation.The amount the grain grows is 
 //affected by the temperature, amount of precipitation, and the number of "graindeer" around to eat it.
