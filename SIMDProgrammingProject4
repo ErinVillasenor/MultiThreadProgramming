@@ -1,3 +1,5 @@
+//Report can be found at https://docs.google.com/document/d/1TiTm7lM0O_TF8lwBqveUSnNJnnmVAVYCt36-vp_cPWw/edit?usp=sharing
+
 #include <xmmintrin.h>
 #include <omp.h>
 #include <stdio.h>
